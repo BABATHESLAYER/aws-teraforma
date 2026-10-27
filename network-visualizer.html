@@ -1,0 +1,2191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Automated Network Deployment - Terraform & AWS Visualizer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-dark: #070b14;
+      --bg-panel: #0d1527;
+      --bg-card: #131f38;
+      --border-color: #1e2e4f;
+      --border-glow: rgba(56, 189, 248, 0.25);
+      
+      --tf-purple: #7b42bc;
+      --tf-purple-light: #9d5fe5;
+      --aws-orange: #ff9900;
+      --aws-amber: #f59e0b;
+      --vpc-blue: #0284c7;
+      --vpc-cyan: #38bdf8;
+      --subnet-cyan: #06b6d4;
+      --asg-orange: #f97316;
+      --ec2-gold: #fbbf24;
+      --cloudwatch-pink: #ec4899;
+      
+      --accent-green: #10b981;
+      --accent-red: #ef4444;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --text-dim: #64748b;
+      
+      --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      --font-mono: 'Fira Code', monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      font-family: var(--font-sans);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+      background-image: 
+        radial-gradient(circle at 50% 0%, rgba(37, 99, 235, 0.12) 0%, transparent 60%),
+        linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+      background-size: 100% 100%, 40px 40px, 40px 40px;
+    }
+
+    /* Top App Bar */
+    header {
+      background: rgba(13, 21, 39, 0.9);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border-color);
+      padding: 14px 28px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+    }
+
+    .brand-group {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .tf-logo-icon {
+      width: 40px;
+      height: 40px;
+      background: linear-gradient(135deg, #5c4ee5, #7b42bc);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 0 16px rgba(123, 66, 188, 0.5);
+    }
+
+    .brand-title h1 {
+      font-size: 1.25rem;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      background: linear-gradient(90deg, #ffffff, #93c5fd);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .brand-title p {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    .header-badges {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .meta-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 0.75rem;
+      font-family: var(--font-mono);
+      font-weight: 500;
+      border: 1px solid var(--border-color);
+      background: rgba(19, 31, 56, 0.6);
+    }
+
+    .meta-badge.aws {
+      border-color: rgba(255, 153, 0, 0.4);
+      color: #ffb74d;
+    }
+
+    .meta-badge.status {
+      border-color: rgba(16, 185, 129, 0.4);
+      color: #34d399;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent-green);
+      box-shadow: 0 0 8px var(--accent-green);
+      animation: pulse-dot 2s infinite;
+    }
+
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.85); }
+    }
+
+    /* Main Container */
+    main {
+      flex: 1;
+      padding: 20px 28px;
+      max-width: 1700px;
+      width: 100%;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    /* Interactive Command Deck */
+    .control-deck {
+      display: grid;
+      grid-template-columns: 1fr 1.5fr 1fr;
+      gap: 16px;
+      background: var(--bg-panel);
+      border: 1px solid var(--border-color);
+      border-radius: 14px;
+      padding: 16px 20px;
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
+    }
+
+    .deck-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .panel-label {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-dim);
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* Stage Toggle Segment */
+    .segment-group {
+      display: flex;
+      background: rgba(7, 11, 20, 0.7);
+      padding: 4px;
+      border-radius: 10px;
+      border: 1px solid var(--border-color);
+      gap: 4px;
+    }
+
+    .segment-btn {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 9px 12px;
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-family: var(--font-sans);
+      font-size: 0.82rem;
+      font-weight: 600;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .segment-btn:hover {
+      color: var(--text-main);
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .segment-btn.active.initial {
+      background: linear-gradient(135deg, rgba(16, 185, 129, 0.25), rgba(5, 150, 105, 0.35));
+      color: #6ee7b7;
+      border: 1px solid #059669;
+      box-shadow: 0 0 16px rgba(16, 185, 129, 0.3);
+    }
+
+    .segment-btn.active.modify {
+      background: linear-gradient(135deg, rgba(245, 158, 11, 0.25), rgba(217, 119, 6, 0.35));
+      color: #fcd34d;
+      border: 1px solid #d97706;
+      box-shadow: 0 0 16px rgba(245, 158, 11, 0.3);
+    }
+
+    /* Traffic Slider & Presets */
+    .traffic-controls {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .slider-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .traffic-counter {
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      color: var(--vpc-cyan);
+      font-weight: 600;
+    }
+
+    .traffic-slider {
+      -webkit-appearance: none;
+      width: 100%;
+      height: 6px;
+      border-radius: 3px;
+      background: #1e293b;
+      outline: none;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .traffic-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: var(--vpc-cyan);
+      cursor: pointer;
+      box-shadow: 0 0 10px var(--vpc-cyan);
+      transition: transform 0.15s, background-color 0.15s;
+    }
+
+    .traffic-slider::-webkit-slider-thumb:hover {
+      transform: scale(1.2);
+      background: #7dd3fc;
+    }
+
+    .preset-pills {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .preset-btn {
+      padding: 4px 9px;
+      font-size: 0.72rem;
+      font-weight: 600;
+      border-radius: 6px;
+      border: 1px solid var(--border-color);
+      background: rgba(19, 31, 56, 0.8);
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .preset-btn:hover, .preset-btn.active {
+      color: #fff;
+      border-color: var(--vpc-cyan);
+      background: rgba(2, 132, 199, 0.25);
+    }
+
+    /* Telemetry KPI row */
+    .kpi-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+    }
+
+    .kpi-card {
+      background: rgba(7, 11, 20, 0.7);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 8px 10px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .kpi-label {
+      font-size: 0.68rem;
+      color: var(--text-dim);
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    .kpi-val {
+      font-size: 1.05rem;
+      font-weight: 700;
+      font-family: var(--font-mono);
+      margin-top: 2px;
+      color: var(--text-main);
+    }
+
+    .kpi-val.highlight { color: var(--asg-orange); }
+    .kpi-val.alarm { color: var(--accent-red); animation: blink-alarm 1s infinite alternate; }
+    .kpi-val.healthy { color: var(--accent-green); }
+
+    @keyframes blink-alarm {
+      from { opacity: 1; }
+      to { opacity: 0.5; }
+    }
+
+    /* Architecture Visualizer Canvas Section */
+    .visualizer-wrapper {
+      position: relative;
+      background: var(--bg-panel);
+      border: 1px solid var(--border-color);
+      border-radius: 16px;
+      padding: 24px;
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+      overflow: hidden;
+    }
+
+    .grid-lines {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      pointer-events: none;
+      background-size: 32px 32px;
+      background-image: 
+        linear-gradient(to right, rgba(56, 189, 248, 0.04) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(56, 189, 248, 0.04) 1px, transparent 1px);
+      z-index: 0;
+    }
+
+    .stage-container {
+      position: relative;
+      z-index: 1;
+      display: grid;
+      grid-template-columns: 290px 1fr 200px;
+      gap: 24px;
+      align-items: stretch;
+      min-height: 560px;
+    }
+
+    /* SECTION 1: Developer Workstation & Terraform Engine */
+    .dev-workstation {
+      background: rgba(19, 31, 56, 0.75);
+      border: 1px solid #334155;
+      border-radius: 12px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+      position: relative;
+    }
+
+    .dev-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .dev-icon {
+      width: 32px;
+      height: 32px;
+      background: rgba(56, 189, 248, 0.15);
+      border: 1px solid rgba(56, 189, 248, 0.4);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--vpc-cyan);
+    }
+
+    .dev-title h3 { font-size: 0.95rem; font-weight: 700; }
+    .dev-title span { font-size: 0.72rem; color: var(--text-muted); }
+
+    /* Terraform main.tf Card */
+    .file-box {
+      background: #090e1a;
+      border: 1px solid #1e293b;
+      border-radius: 8px;
+      padding: 10px;
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+    }
+
+    .file-title {
+      display: flex;
+      justify-content: space-between;
+      color: #93c5fd;
+      margin-bottom: 6px;
+      font-size: 0.72rem;
+      font-weight: 600;
+      border-bottom: 1px solid #1e293b;
+      padding-bottom: 4px;
+    }
+
+    .code-snippet { color: #cbd5e1; line-height: 1.4; }
+    .code-keyword { color: #f472b6; }
+    .code-string { color: #a5f3fc; }
+    .code-tag-val {
+      padding: 1px 4px;
+      border-radius: 4px;
+      transition: all 0.3s ease;
+      font-weight: 600;
+    }
+    .code-tag-val.green {
+      background: rgba(16, 185, 129, 0.25);
+      color: #6ee7b7;
+      border: 1px solid rgba(16, 185, 129, 0.5);
+    }
+    .code-tag-val.modified {
+      background: rgba(245, 158, 11, 0.25);
+      color: #fde047;
+      border: 1px solid rgba(245, 158, 11, 0.6);
+      animation: flash-tag 1s infinite alternate;
+    }
+
+    @keyframes flash-tag {
+      from { box-shadow: 0 0 2px rgba(245, 158, 11, 0.4); }
+      to { box-shadow: 0 0 10px rgba(245, 158, 11, 0.8); }
+    }
+
+    /* Automated Webhook Listener Pill */
+    .webhook-listener-card {
+      background: rgba(236, 72, 153, 0.1);
+      border: 1px dashed rgba(236, 72, 153, 0.4);
+      border-radius: 8px;
+      padding: 8px 10px;
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+    }
+
+    .webhook-title {
+      color: #f472b6;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 3px;
+    }
+
+    .cli-flow-box {
+      background: rgba(123, 66, 188, 0.12);
+      border: 1px dashed rgba(123, 66, 188, 0.4);
+      border-radius: 8px;
+      padding: 8px 10px;
+    }
+
+    .cli-commands {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      font-family: var(--font-mono);
+      font-size: 0.74rem;
+      color: #d8b4fe;
+    }
+
+    .cli-cmd { display: flex; align-items: center; gap: 6px; }
+    .cli-cmd.active { color: #67e8f9; font-weight: 600; }
+    .cli-cmd .cmd-bullet { width: 5px; height: 5px; border-radius: 50%; background: var(--tf-purple-light); }
+
+    /* SECTION 2: AWS Cloud Infrastructure Hierarchy */
+    .cloud-canvas-area { position: relative; }
+
+    .region-enclosure {
+      border: 2px dashed rgba(148, 163, 184, 0.45);
+      border-radius: 14px;
+      padding: 18px;
+      background: rgba(15, 23, 42, 0.45);
+      position: relative;
+      box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.4);
+    }
+
+    .enclosure-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 14px;
+    }
+
+    .region-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: linear-gradient(135deg, rgba(255, 153, 0, 0.2), rgba(255, 153, 0, 0.08));
+      border: 1px solid rgba(255, 153, 0, 0.5);
+      color: #ffb74d;
+      padding: 4px 12px;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      font-weight: 700;
+    }
+
+    /* VPC Enclosure */
+    .vpc-enclosure {
+      border: 2px solid var(--vpc-blue);
+      border-radius: 12px;
+      padding: 16px;
+      background: rgba(2, 132, 199, 0.05);
+      position: relative;
+      box-shadow: 0 0 25px rgba(2, 132, 199, 0.12);
+      transition: all 0.3s ease;
+    }
+
+    .vpc-enclosure.highlight-change {
+      border-color: var(--aws-amber);
+      box-shadow: 0 0 25px rgba(245, 158, 11, 0.25);
+    }
+
+    .vpc-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .vpc-title-group { display: flex; align-items: center; gap: 8px; }
+    .vpc-icon {
+      width: 26px;
+      height: 26px;
+      background: #0369a1;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+    }
+
+    .vpc-title-text { font-size: 0.92rem; font-weight: 700; color: #e0f2fe; }
+    .vpc-cidr {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      color: #7dd3fc;
+      background: rgba(2, 132, 199, 0.2);
+      padding: 2px 7px;
+      border-radius: 4px;
+      border: 1px solid rgba(56, 189, 248, 0.3);
+    }
+
+    .vpc-tag-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 10px;
+      border-radius: 20px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      font-family: var(--font-mono);
+      transition: all 0.3s ease;
+    }
+
+    .vpc-tag-badge.green {
+      background: rgba(16, 185, 129, 0.2);
+      color: #6ee7b7;
+      border: 1px solid #10b981;
+      box-shadow: 0 0 12px rgba(16, 185, 129, 0.3);
+    }
+
+    .vpc-tag-badge.modified {
+      background: rgba(245, 158, 11, 0.25);
+      color: #fcd34d;
+      border: 1px solid #f59e0b;
+      box-shadow: 0 0 14px rgba(245, 158, 11, 0.4);
+    }
+
+    /* Subnet Enclosure */
+    .subnet-enclosure {
+      border: 2px solid var(--subnet-cyan);
+      border-radius: 10px;
+      padding: 14px;
+      background: rgba(6, 182, 212, 0.05);
+      box-shadow: 0 0 20px rgba(6, 182, 212, 0.08);
+      position: relative;
+    }
+
+    .subnet-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .subnet-title-group { display: flex; align-items: center; gap: 8px; }
+    .subnet-icon {
+      width: 22px;
+      height: 22px;
+      background: #0891b2;
+      border-radius: 5px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+    }
+
+    .subnet-title-text { font-size: 0.85rem; font-weight: 700; color: #cffafe; }
+    .subnet-cidr {
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      color: #a5f3fc;
+      background: rgba(6, 182, 212, 0.15);
+      padding: 2px 6px;
+      border-radius: 4px;
+      border: 1px solid rgba(6, 182, 212, 0.3);
+    }
+
+    .subnet-tag-badge {
+      background: rgba(14, 165, 233, 0.2);
+      border: 1px solid rgba(14, 165, 233, 0.4);
+      color: #7dd3fc;
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      padding: 2px 8px;
+      border-radius: 10px;
+    }
+
+    /* Auto Scaling Group Enclosure */
+    .asg-enclosure {
+      border: 2px dashed rgba(249, 115, 22, 0.7);
+      border-radius: 8px;
+      padding: 14px;
+      background: rgba(249, 115, 22, 0.04);
+      position: relative;
+    }
+
+    .asg-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .asg-title-group { display: flex; align-items: center; gap: 8px; }
+    .asg-icon {
+      width: 22px;
+      height: 22px;
+      background: #ea580c;
+      border-radius: 5px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+    }
+
+    .asg-title {
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: #fed7aa;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .asg-status-indicator {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.72rem;
+      font-family: var(--font-mono);
+      color: #fdba74;
+      background: rgba(249, 115, 22, 0.15);
+      padding: 2px 8px;
+      border-radius: 6px;
+      border: 1px solid rgba(249, 115, 22, 0.4);
+    }
+
+    /* CloudWatch Monitor Box within Region */
+    .cloudwatch-alarm-box {
+      margin-top: 14px;
+      background: rgba(236, 72, 153, 0.08);
+      border: 1.5px solid rgba(236, 72, 153, 0.4);
+      border-radius: 8px;
+      padding: 10px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: relative;
+    }
+
+    .cloudwatch-alarm-box.in-alarm {
+      border-color: #ef4444;
+      background: rgba(239, 68, 68, 0.15);
+      box-shadow: 0 0 16px rgba(239, 68, 68, 0.4);
+    }
+
+    .cw-info { display: flex; align-items: center; gap: 10px; }
+    .cw-icon {
+      width: 28px;
+      height: 28px;
+      background: #db2777;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+    }
+
+    .cw-title { font-size: 0.78rem; font-weight: 700; color: #fbcfe8; }
+    .cw-sub { font-size: 0.68rem; color: #cbd5e1; font-family: var(--font-mono); }
+
+    .cw-status-pill {
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      font-weight: 700;
+      padding: 3px 10px;
+      border-radius: 12px;
+      background: rgba(16, 185, 129, 0.2);
+      border: 1px solid #10b981;
+      color: #6ee7b7;
+    }
+
+    .cw-status-pill.alarm {
+      background: rgba(239, 68, 68, 0.25);
+      border-color: #ef4444;
+      color: #fca5a5;
+      animation: blink-alarm 1s infinite alternate;
+    }
+
+    /* EC2 Instances Flex Grid */
+    .nodes-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+      gap: 10px;
+      position: relative;
+    }
+
+    .ec2-node {
+      background: #0f172a;
+      border: 1.5px solid #334155;
+      border-radius: 8px;
+      padding: 10px 8px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      cursor: pointer;
+      position: relative;
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+
+    .ec2-node:hover {
+      transform: translateY(-3px);
+      border-color: var(--ec2-gold);
+      box-shadow: 0 8px 20px rgba(251, 191, 36, 0.25);
+    }
+
+    .ec2-node.scale-in-anim {
+      animation: spawn-node 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
+    @keyframes spawn-node {
+      from { opacity: 0; transform: scale(0.6) translateY(20px); }
+      to { opacity: 1; transform: scale(1) translateY(0); }
+    }
+
+    .ec2-node.receiving-traffic {
+      border-color: #38bdf8;
+      box-shadow: 0 0 15px rgba(56, 189, 248, 0.4);
+    }
+
+    .node-chip-icon {
+      width: 32px;
+      height: 32px;
+      background: rgba(251, 191, 36, 0.12);
+      border: 1px solid rgba(251, 191, 36, 0.4);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--ec2-gold);
+      margin-bottom: 6px;
+    }
+
+    .node-title { font-size: 0.75rem; font-weight: 700; color: #f1f5f9; margin-bottom: 2px; }
+    .node-ip { font-family: var(--font-mono); font-size: 0.68rem; color: var(--text-muted); margin-bottom: 4px; }
+    .node-badge-service {
+      display: inline-block;
+      font-size: 0.62rem;
+      font-family: var(--font-mono);
+      padding: 1px 5px;
+      border-radius: 4px;
+      background: rgba(56, 189, 248, 0.15);
+      color: #38bdf8;
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      margin-bottom: 4px;
+    }
+
+    .node-load-bar {
+      width: 100%;
+      height: 4px;
+      background: #1e293b;
+      border-radius: 2px;
+      overflow: hidden;
+      margin-top: 4px;
+    }
+
+    .node-load-fill {
+      height: 100%;
+      background: var(--accent-green);
+      transition: width 0.3s ease, background-color 0.3s ease;
+    }
+
+    /* SECTION 3: Edge Internet Gateway & Client Traffic */
+    .edge-gateway-zone {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 20px;
+      position: relative;
+    }
+
+    .igw-component {
+      width: 110px;
+      background: rgba(19, 31, 56, 0.9);
+      border: 2px solid var(--aws-orange);
+      border-radius: 12px;
+      padding: 12px 10px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      box-shadow: 0 0 25px rgba(255, 153, 0, 0.25);
+      position: relative;
+      cursor: pointer;
+      transition: transform 0.2s;
+    }
+
+    .igw-component:hover { transform: scale(1.05); }
+
+    .igw-icon {
+      width: 40px;
+      height: 40px;
+      background: radial-gradient(circle, #ff9900 30%, #b45309 100%);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      box-shadow: 0 0 16px rgba(255, 153, 0, 0.5);
+      margin-bottom: 6px;
+    }
+
+    .igw-name { font-size: 0.78rem; font-weight: 700; color: #fed7aa; }
+    .igw-sub { font-size: 0.65rem; color: var(--text-dim); }
+
+    .client-zone {
+      width: 120px;
+      background: rgba(15, 23, 42, 0.85);
+      border: 1px solid #475569;
+      border-radius: 12px;
+      padding: 14px 10px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+    }
+
+    .client-icon {
+      width: 42px;
+      height: 42px;
+      background: #1e293b;
+      border: 1px solid #64748b;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #93c5fd;
+      margin-bottom: 6px;
+    }
+
+    .client-title { font-size: 0.8rem; font-weight: 700; color: #f8fafc; }
+    .client-sub { font-size: 0.65rem; color: var(--text-muted); }
+
+    /* Canvas Layer */
+    .traffic-canvas-layer {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 5;
+    }
+
+    /* Bottom Suite */
+    .bottom-suite {
+      display: grid;
+      grid-template-columns: 1.2fr 0.8fr;
+      gap: 16px;
+    }
+
+    .terminal-container {
+      background: #060911;
+      border: 1px solid #1e293b;
+      border-radius: 12px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+    }
+
+    .terminal-topbar {
+      background: #0f172a;
+      padding: 8px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid #1e293b;
+    }
+
+    .term-dots { display: flex; gap: 6px; }
+    .term-dot { width: 10px; height: 10px; border-radius: 50%; }
+    .term-dot.r { background: #ef4444; }
+    .term-dot.y { background: #eab308; }
+    .term-dot.g { background: #22c55e; }
+
+    .term-title { font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-muted); }
+
+    .terminal-body {
+      padding: 14px;
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      line-height: 1.55;
+      color: #e2e8f0;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+
+    .term-line { display: flex; gap: 8px; margin-bottom: 3px; }
+    .term-prompt { color: #38bdf8; user-select: none; }
+    .term-success { color: #34d399; font-weight: 600; }
+    .term-highlight { color: #fbbf24; }
+    .term-cyan { color: #67e8f9; }
+    .term-pink { color: #f472b6; font-weight: 600; }
+
+    /* Diff View */
+    .diff-panel {
+      background: var(--bg-panel);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .diff-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 8px;
+    }
+
+    .diff-title {
+      font-size: 0.85rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--text-main);
+    }
+
+    .diff-badge-count {
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      padding: 2px 8px;
+      border-radius: 12px;
+      background: rgba(245, 158, 11, 0.2);
+      border: 1px solid rgba(245, 158, 11, 0.4);
+      color: #fbbf24;
+    }
+
+    .diff-code-box {
+      background: #090e1a;
+      border-radius: 8px;
+      padding: 10px;
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      line-height: 1.5;
+      border: 1px solid #1e293b;
+    }
+
+    .diff-line { padding: 2px 6px; border-radius: 4px; margin-bottom: 2px; }
+    .diff-line.del { background: rgba(239, 68, 68, 0.18); color: #fca5a5; border-left: 3px solid #ef4444; }
+    .diff-line.add { background: rgba(16, 185, 129, 0.18); color: #86efac; border-left: 3px solid #10b981; }
+    .diff-line.neutral { color: #94a3b8; }
+
+    /* Modal */
+    .modal-backdrop {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0, 0, 0, 0.78);
+      backdrop-filter: blur(6px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+    }
+
+    .modal-backdrop.open { display: flex; }
+
+    .modal-window {
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 14px;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+      overflow: hidden;
+      animation: modal-pop 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    @keyframes modal-pop {
+      from { transform: scale(0.9); opacity: 0; }
+      to { transform: scale(1); opacity: 1; }
+    }
+
+    .modal-header {
+      padding: 14px 18px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid #334155;
+    }
+
+    .modal-close-btn {
+      background: transparent;
+      border: none;
+      color: #94a3b8;
+      cursor: pointer;
+      font-size: 1.2rem;
+    }
+    .modal-close-btn:hover { color: #fff; }
+
+    /* Toast */
+    .scale-toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: #0f172a;
+      border: 1.5px solid #f97316;
+      border-radius: 10px;
+      padding: 14px 18px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      box-shadow: 0 10px 30px rgba(249, 115, 22, 0.35);
+      z-index: 99;
+      transform: translateY(120px);
+      opacity: 0;
+      transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .scale-toast.show { transform: translateY(0); opacity: 1; }
+  </style>
+</head>
+<body>
+
+  <!-- Top App Bar -->
+  <header>
+    <div class="brand-group">
+      <div class="tf-logo-icon">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+          <path d="M7.7 2L13.8 5.5V12.5L7.7 9V2Z" fill="#ffffff" fill-opacity="0.95"/>
+          <path d="M14.7 5.5L20.8 9V16L14.7 12.5V5.5Z" fill="#ffffff" fill-opacity="0.8"/>
+          <path d="M7.7 10L13.8 13.5V20.5L7.7 17V10Z" fill="#ffffff" fill-opacity="0.9"/>
+          <path d="M0.7 5.5L6.8 9V16L0.7 12.5V5.5Z" fill="#ffffff" fill-opacity="0.6"/>
+        </svg>
+      </div>
+      <div class="brand-title">
+        <h1>Terraform & AWS Network Architecture Visualizer</h1>
+        <p>Event-Driven IaC &bull; CloudWatch Alarms &bull; Automated Scaling Feedback Loop</p>
+      </div>
+    </div>
+
+    <div class="header-badges">
+      <div class="meta-badge aws">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></svg>
+        <span>Region: us-east-1</span>
+      </div>
+      <button onclick="openTerraformExplainerModal()" style="background: linear-gradient(135deg, #7b42bc, #5c4ee5); border: 1px solid #a855f7; color: #fff; padding: 6px 14px; border-radius: 20px; font-size: 0.78rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; box-shadow: 0 0 14px rgba(123, 66, 188, 0.4);">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        <span>How Terraform Works?</span>
+      </button>
+      <div class="meta-badge status">
+        <div class="status-dot"></div>
+        <span id="header-state-text">VPC: Available (2 Resources)</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main>
+    <!-- Interactive Command Deck -->
+    <section class="control-deck">
+      <!-- 1. Deployment State Switcher -->
+      <div class="deck-panel">
+        <div class="panel-label">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+          Assignment 6 IaC Stage
+        </div>
+        <div class="segment-group">
+          <button id="btn-deploy" class="segment-btn active initial" onclick="setTerraformMode('deploy')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+            Step 1: Initial Deploy
+          </button>
+          <button id="btn-modify" class="segment-btn" onclick="setTerraformMode('modify')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+            Step 2: Modify Tag
+          </button>
+        </div>
+        <div style="font-size: 0.72rem; color: var(--text-dim);">
+          VPC Tag: <code id="active-tag-label" style="color:#6ee7b7">Assignment6-VPC</code> (In-place diff)
+        </div>
+      </div>
+
+      <!-- 2. Traffic Generator & Threshold Controls -->
+      <div class="deck-panel">
+        <div class="panel-label">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+          Traffic Generator & Threshold Alarm (XYZ)
+        </div>
+        <div class="traffic-controls">
+          <div class="slider-header">
+            <span style="font-size:0.75rem; color:var(--text-muted);">Incoming Traffic:</span>
+            <span id="traffic-display" class="traffic-counter">120 req/s &bull; NORMAL</span>
+          </div>
+          <input type="range" id="traffic-slider" class="traffic-slider" min="10" max="1000" step="10" value="120" oninput="onTrafficSliderChange(this.value)">
+          <div class="preset-pills">
+            <button class="preset-btn" onclick="setTrafficPreset(30)">Idle (30/s)</button>
+            <button class="preset-btn active" onclick="setTrafficPreset(150)">Optimal (150/s)</button>
+            <button class="preset-btn" onclick="setTrafficPreset(480)">Breach &rarr; IaC Scale Out (480/s)</button>
+            <button class="preset-btn" onclick="setTrafficPreset(850)">Spike &rarr; Max Out (850/s)</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3. Real-time Telemetry & CloudWatch Alarm Status -->
+      <div class="deck-panel">
+        <div class="panel-label">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+          Live CloudWatch & IaC Loop
+        </div>
+        <div class="kpi-row">
+          <div class="kpi-card">
+            <span class="kpi-label">Active Nodes</span>
+            <span id="kpi-instances" class="kpi-val healthy">2</span>
+          </div>
+          <div class="kpi-card">
+            <span class="kpi-label">CW Alarm (XYZ)</span>
+            <span id="kpi-alarm" class="kpi-val healthy">OK</span>
+          </div>
+          <div class="kpi-card">
+            <span class="kpi-label">IaC Desired</span>
+            <span id="kpi-desired" class="kpi-val">2 nodes</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Visualizer Canvas & Architecture Diagram -->
+    <section class="visualizer-wrapper">
+      <div class="grid-lines"></div>
+
+      <!-- Canvas for real-time animated packet flows:
+           - Blue: Client HTTP traffic
+           - Pink/Red: CloudWatch Alarm API Webhook back to Terraform
+           - Purple: Terraform IaC API provisioning commands to AWS -->
+      <canvas id="traffic-canvas" class="traffic-canvas-layer"></canvas>
+
+      <div class="stage-container">
+        
+        <!-- COLUMN 1: Developer Workstation & Terraform Engine -->
+        <div class="dev-workstation" id="dev-workstation">
+          <div class="dev-header">
+            <div class="dev-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+            </div>
+            <div class="dev-title">
+              <h3>Developer Workstation</h3>
+              <span>Terraform Engine &bull; IaC Controller</span>
+            </div>
+          </div>
+
+          <!-- Terraform main.tf Card -->
+          <div class="file-box">
+            <div class="file-title">
+              <span>main.tf (IaC Script)</span>
+              <span>HCL</span>
+            </div>
+            <div class="code-snippet">
+              <span class="code-keyword">resource</span> <span class="code-string">"aws_vpc"</span> <span class="code-string">"main_vpc"</span> {<br>
+              &nbsp;&nbsp;cidr_block = <span class="code-string">"10.0.0.0/16"</span><br>
+              &nbsp;&nbsp;tags = {<br>
+              &nbsp;&nbsp;&nbsp;&nbsp;Name = <span id="code-vpc-tag" class="code-tag-val green">"Assignment6-VPC"</span><br>
+              &nbsp;&nbsp;}<br>
+              }<br>
+              <span class="code-keyword">resource</span> <span class="code-string">"aws_asg"</span> <span class="code-string">"web"</span> {<br>
+              &nbsp;&nbsp;desired_capacity = <span id="code-desired-capacity" style="color:#fbbf24; font-weight:700;">2</span><br>
+              }
+            </div>
+          </div>
+
+          <!-- Event-Driven Webhook / CI-CD Listener -->
+          <div class="webhook-listener-card" id="webhook-card">
+            <div class="webhook-title">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 14 14"/></svg>
+              <span>EventBridge / Webhook Listener</span>
+            </div>
+            <div id="webhook-status-text" style="color:#94a3b8; font-size:0.68rem;">
+              Listening for CloudWatch threshold alarms...
+            </div>
+          </div>
+
+          <!-- CLI execution cycle -->
+          <div class="cli-flow-box">
+            <div style="font-size:0.68rem; color:#a855f7; font-weight:700; margin-bottom:4px; text-transform:uppercase;">IaC Pipeline Trigger</div>
+            <div class="cli-commands">
+              <div class="cli-cmd" id="cmd-init"><div class="cmd-bullet"></div> <span>terraform init</span></div>
+              <div class="cli-cmd" id="cmd-plan"><div class="cmd-bullet"></div> <span>terraform plan -target=asg</span></div>
+              <div class="cli-cmd active" id="cmd-apply"><div class="cmd-bullet"></div> <span>terraform apply -auto-approve</span></div>
+            </div>
+          </div>
+
+          <button onclick="triggerTerraformApplyAnimation()" style="background:#2563eb; color:#fff; border:none; padding:7px 12px; border-radius:6px; font-size:0.75rem; font-weight:600; cursor:pointer; width:100%;">
+            Manually Re-run Terraform Apply &rarr;
+          </button>
+        </div>
+
+        <!-- COLUMN 2: AWS Cloud Infrastructure Enclosures -->
+        <div class="cloud-canvas-area">
+          
+          <!-- Outer: AWS Region (us-east-1) -->
+          <div class="region-enclosure">
+            <div class="enclosure-header">
+              <div class="region-badge">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z"/></svg>
+                <span>AWS Region: us-east-1</span>
+              </div>
+              <span style="font-size:0.72rem; color:var(--text-dim); font-family:var(--font-mono);">Availability Zones: us-east-1a</span>
+            </div>
+
+            <!-- Virtual Private Cloud (VPC) -->
+            <div class="vpc-enclosure" id="vpc-enclosure">
+              <div class="vpc-header">
+                <div class="vpc-title-group">
+                  <div class="vpc-icon">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
+                  </div>
+                  <span class="vpc-title-text">Virtual Private Cloud (VPC)</span>
+                  <span class="vpc-cidr">10.0.0.0/16</span>
+                </div>
+                <div id="vpc-tag-badge" class="vpc-tag-badge green">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><circle cx="7" cy="7" r="1"/></svg>
+                  <span id="vpc-tag-text">Tag: Assignment6-VPC</span>
+                </div>
+              </div>
+
+              <!-- Public Subnet (10.0.1.0/24 in us-east-1a) -->
+              <div class="subnet-enclosure">
+                <div class="subnet-header">
+                  <div class="subnet-title-group">
+                    <div class="subnet-icon">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                    </div>
+                    <span class="subnet-title-text">Public Subnet</span>
+                    <span class="subnet-cidr">10.0.1.0/24 &bull; us-east-1a</span>
+                  </div>
+                  <div class="subnet-tag-badge">Tag: Assignment6-Subnet</div>
+                </div>
+
+                <!-- Auto Scaling Group -->
+                <div class="asg-enclosure" id="asg-enclosure">
+                  <div class="asg-header">
+                    <div class="asg-title-group">
+                      <div class="asg-icon">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+                      </div>
+                      <span class="asg-title">Auto Scaling Group (ASG)</span>
+                    </div>
+                    <div class="asg-status-indicator" id="asg-badge-info">
+                      <span id="asg-count-text">Capacity: 2 nodes</span> (Min: 1, Max: 4)
+                    </div>
+                  </div>
+
+                  <!-- Dynamic EC2 Web Nodes List -->
+                  <div class="nodes-grid" id="nodes-grid">
+                    <!-- Injected dynamically -->
+                  </div>
+                </div>
+
+                <!-- CloudWatch Metric Alarm Widget -->
+                <div class="cloudwatch-alarm-box" id="cloudwatch-alarm-box">
+                  <div class="cw-info">
+                    <div class="cw-icon">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                    </div>
+                    <div>
+                      <div class="cw-title">AWS CloudWatch Alarm &bull; Metric: TrafficRate</div>
+                      <div class="cw-sub">Rule: If RequestRate &gt; 350 RPS for 1 evaluation period &rarr; Trigger Alarm</div>
+                    </div>
+                  </div>
+                  <div id="cw-status-pill" class="cw-status-pill">State: OK</div>
+                </div>
+
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- COLUMN 3: Internet Gateway (IGW) & External Client -->
+        <div class="edge-gateway-zone">
+          
+          <!-- Internet Gateway Attached to VPC -->
+          <div class="igw-component" id="igw-component" title="Attached to VPC for Internet Egress/Ingress">
+            <div class="igw-icon">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/><polyline points="12 12 16 16 12 20"/><line x1="8" y1="16" x2="16" y2="16"/></svg>
+            </div>
+            <div class="igw-name">Internet Gateway</div>
+            <div class="igw-sub">aws_internet_gateway</div>
+          </div>
+
+          <!-- Outside World / Client Browser -->
+          <div class="client-zone" id="client-zone">
+            <div class="client-icon">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+            </div>
+            <div class="client-title">Client / Users</div>
+            <div class="client-sub">HTTP Port 80</div>
+          </div>
+
+        </div>
+
+      </div>
+    </section>
+
+    <!-- Bottom Interactive Terminal & Diff Viewer Suite -->
+    <section class="bottom-suite">
+      <!-- Terraform PowerShell Console -->
+      <div class="terminal-container">
+        <div class="terminal-topbar">
+          <div class="term-dots">
+            <div class="term-dot r"></div>
+            <div class="term-dot y"></div>
+            <div class="term-dot g"></div>
+          </div>
+          <div class="term-title">PowerShell &bull; terraform-network (IaC Stream)</div>
+          <button onclick="clearTerminal()" style="background:transparent; border:none; color:var(--text-dim); font-size:0.75rem; cursor:pointer;">Clear</button>
+        </div>
+        <div class="terminal-body" id="terminal-body">
+          <div class="term-line"><span class="term-prompt">PS D:\aws teraforma&gt;</span> <span>terraform apply -auto-approve</span></div>
+          <div class="term-line"><span class="term-cyan">aws_vpc.main_vpc: Creation complete after 2s [id=vpc-084a92c10fa]</span></div>
+          <div class="term-line"><span class="term-cyan">aws_subnet.main_subnet: Creation complete after 1s [id=subnet-01e4a8f9]</span></div>
+          <div class="term-line"><span class="term-success">Apply complete! Resources: 2 added, 0 changed, 0 destroyed.</span></div>
+        </div>
+      </div>
+
+      <!-- In-Place Diff & State Badge Panel -->
+      <div class="diff-panel">
+        <div class="diff-header">
+          <div class="diff-title">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+            <span>Terraform State Diff & Inspection</span>
+          </div>
+          <span id="diff-badge" class="diff-badge-count">2 added, 0 changed, 0 destroyed</span>
+        </div>
+
+        <div class="diff-code-box" id="diff-code-box">
+          <div class="diff-line neutral"># aws_vpc.main_vpc will be updated in-place</div>
+          <div class="diff-line neutral">&nbsp;&nbsp;~ tags = {</div>
+          <div id="diff-line-del" class="diff-line del">&nbsp;&nbsp;&nbsp;&nbsp;- "Name" = "Assignment6-VPC"</div>
+          <div id="diff-line-add" class="diff-line add">&nbsp;&nbsp;&nbsp;&nbsp;+ "Name" = "Assignment6-VPC-modified"</div>
+          <div class="diff-line neutral">&nbsp;&nbsp;&nbsp;&nbsp;}</div>
+        </div>
+
+        <div style="font-size:0.75rem; color:var(--text-muted); line-height:1.4;">
+          <strong>Feedback Loop Mechanism:</strong> When CloudWatch threshold is crossed, EventBridge dispatches an event to the Terraform controller. Terraform modifies the HCL desired state and runs <code>apply</code> against the AWS Auto Scaling API in real time.
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Modal for EC2 Node HTTP index.html Inspection -->
+  <div class="modal-backdrop" id="web-modal" onclick="closeModalOnBackdrop(event)">
+    <div class="modal-window" style="width: 550px; max-width: 90vw;">
+      <div class="modal-header">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <div style="width:10px; height:10px; border-radius:50%; background:#10b981;"></div>
+          <strong id="modal-server-title" style="font-size:0.9rem;">EC2 Web Node 1 (10.0.1.14:80)</strong>
+        </div>
+        <button class="modal-close-btn" onclick="closeModal()">&times;</button>
+      </div>
+      <div class="modal-content" style="padding: 18px;">
+        <div style="border: 1px solid #334155; border-radius: 8px; background: #fff; color: #1e293b; overflow: hidden;">
+          <div style="background: #e2e8f0; padding: 6px 12px; font-family: var(--font-mono); font-size: 0.75rem; color: #475569; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid #cbd5e1;">
+            <span>🔒 http://<span id="modal-server-ip">10.0.1.14</span>:80/index.html</span>
+          </div>
+          <div style="padding: 20px; background: #ffffff; color: #0f172a; font-family: var(--font-sans);">
+            <div style="text-align: center; padding: 16px; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0;">
+              <h2 style="color: #0284c7; font-size: 1.25rem; margin-bottom: 6px;">Apache HTTP Server Online</h2>
+              <p style="font-size:0.8rem; color:#64748b; margin-bottom:10px;">AWS Assignment 6 &bull; Automated Deployment</p>
+              <div style="background:#e0f2fe; color:#0369a1; padding:6px; border-radius:6px; font-family:var(--font-mono); font-size:0.72rem;">
+                Node ID: <span id="modal-instance-id">i-0a91fbc82</span> &bull; AZ: us-east-1a
+              </div>
+            </div>
+            <div style="margin-top:14px; font-size:0.78rem; color:#475569; line-height:1.5;">
+              <strong>Response Headers:</strong><br>
+              <code>HTTP/1.1 200 OK</code><br>
+              <code>Server: Apache/2.4.52 (Amazon Linux 2023)</code><br>
+              <code>Content-Type: text/html; charset=UTF-8</code>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal for Comprehensive Terraform Architecture Explainer -->
+  <div class="modal-backdrop" id="tf-explainer-modal" onclick="closeExplainerOnBackdrop(event)">
+    <div class="modal-window" style="width: 760px; max-width: 95vw;">
+      <div class="modal-header" style="background: linear-gradient(135deg, #1e1b4b, #0f172a); border-bottom: 1px solid #4338ca;">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <div style="width:32px; height:32px; background:linear-gradient(135deg, #5c4ee5, #7b42bc); border-radius:8px; display:flex; align-items:center; justify-content:center;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+              <path d="M7.7 2L13.8 5.5V12.5L7.7 9V2Z" fill="#ffffff" fill-opacity="0.95"/>
+              <path d="M14.7 5.5L20.8 9V16L14.7 12.5V5.5Z" fill="#ffffff" fill-opacity="0.8"/>
+              <path d="M7.7 10L13.8 13.5V20.5L7.7 17V10Z" fill="#ffffff" fill-opacity="0.9"/>
+              <path d="M0.7 5.5L6.8 9V16L0.7 12.5V5.5Z" fill="#ffffff" fill-opacity="0.6"/>
+            </svg>
+          </div>
+          <div>
+            <strong style="font-size:1.05rem; color:#f8fafc;">What is Terraform & How Does It Work?</strong>
+            <p style="font-size:0.75rem; color:#a5b4fc; margin-top:1px;">Infrastructure as Code (IaC) &bull; Assignment 6 Concepts Guide</p>
+          </div>
+        </div>
+        <button class="modal-close-btn" onclick="closeTerraformExplainerModal()">&times;</button>
+      </div>
+
+      <div class="modal-content" style="max-height: 75vh; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; padding: 20px;">
+        
+        <!-- Concept 1: Definition -->
+        <div style="background: rgba(30, 41, 59, 0.7); border: 1px solid #334155; border-radius: 10px; padding: 14px;">
+          <h4 style="color:#38bdf8; font-size:0.92rem; display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+            1. What is Terraform? (Infrastructure as Code)
+          </h4>
+          <p style="font-size:0.82rem; color:#cbd5e1; line-height:1.55;">
+            <strong>Terraform</strong> is an open-source <em>Infrastructure as Code (IaC)</em> tool created by HashiCorp. Instead of manually clicking buttons in the AWS Management Console to create VPCs, subnets, and servers, you define your entire infrastructure in text files (<code>main.tf</code>) using <strong>HCL (HashiCorp Configuration Language)</strong>.
+          </p>
+        </div>
+
+        <!-- Concept 2: The Core Workflow -->
+        <div style="background: rgba(30, 41, 59, 0.7); border: 1px solid #334155; border-radius: 10px; padding: 14px;">
+          <h4 style="color:#a855f7; font-size:0.92rem; display:flex; align-items:center; gap:8px; margin-bottom:10px;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+            2. The 4-Step Terraform Workflow (Assignment 6 Steps)
+          </h4>
+          <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px;">
+            <div style="background:#090e1a; border:1px solid #1e293b; border-radius:8px; padding:10px;">
+              <span style="color:#67e8f9; font-family:var(--font-mono); font-size:0.78rem; font-weight:700;">1. terraform init</span>
+              <p style="font-size:0.73rem; color:#94a3b8; margin-top:3px;">Downloads AWS provider plugin (<code>hashicorp/aws</code>) and sets up the workspace.</p>
+            </div>
+            <div style="background:#090e1a; border:1px solid #1e293b; border-radius:8px; padding:10px;">
+              <span style="color:#67e8f9; font-family:var(--font-mono); font-size:0.78rem; font-weight:700;">2. terraform validate</span>
+              <p style="font-size:0.73rem; color:#94a3b8; margin-top:3px;">Verifies syntax and configuration correctness without making cloud API calls.</p>
+            </div>
+            <div style="background:#090e1a; border:1px solid #1e293b; border-radius:8px; padding:10px;">
+              <span style="color:#67e8f9; font-family:var(--font-mono); font-size:0.78rem; font-weight:700;">3. terraform plan</span>
+              <p style="font-size:0.73rem; color:#94a3b8; margin-top:3px;">Compares <strong>Desired State</strong> vs <strong>Real AWS State</strong>, showing exact add (+), change (~), or destroy (-) actions.</p>
+            </div>
+            <div style="background:#090e1a; border:1px solid #1e293b; border-radius:8px; padding:10px;">
+              <span style="color:#67e8f9; font-family:var(--font-mono); font-size:0.78rem; font-weight:700;">4. terraform apply</span>
+              <p style="font-size:0.73rem; color:#94a3b8; margin-top:3px;">Calls AWS REST APIs to provision resources and updates the <code>terraform.tfstate</code> file.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Concept 3: The State File & In-Place Update -->
+        <div style="background: rgba(30, 41, 59, 0.7); border: 1px solid #334155; border-radius: 10px; padding: 14px;">
+          <h4 style="color:#fbbf24; font-size:0.92rem; display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+            3. In-Place Modification (Assignment 6 Step 15)
+          </h4>
+          <p style="font-size:0.82rem; color:#cbd5e1; line-height:1.55; margin-bottom:6px;">
+            When updating <code>Name = "Assignment6-VPC-modified"</code>, Terraform knows the VPC already exists via <code>terraform.tfstate</code>. Because CIDR wasn't altered, it updates the tag in-place (<strong>0 added, 1 changed, 0 destroyed</strong>) without tearing down any network interfaces!
+          </p>
+        </div>
+
+        <!-- Concept 4: Event-Driven Scaling Loop -->
+        <div style="background: rgba(30, 41, 59, 0.7); border: 1px solid #334155; border-radius: 10px; padding: 14px;">
+          <h4 style="color:#ec4899; font-size:0.92rem; display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/></svg>
+            4. Event-Driven IaC Scaling (CloudWatch &rarr; Webhook &rarr; Terraform API)
+          </h4>
+          <p style="font-size:0.82rem; color:#cbd5e1; line-height:1.55;">
+            In modern GitOps/IaC architectures, metrics from <strong>CloudWatch</strong> breach a threshold (e.g. <code>RequestCount &gt; 350</code>), triggering an <strong>EventBridge</strong> webhook to your IaC controller. The controller updates <code>desired_capacity</code> in the Terraform code and triggers <code>terraform apply</code>, scaling out the cluster automatically and cleanly!
+          </p>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast for Auto-Scaling events -->
+  <div class="scale-toast" id="scale-toast">
+    <div style="background:#ea580c; border-radius:6px; width:28px; height:28px; display:flex; align-items:center; justify-content:center; color:#fff;">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 3 21 3 21 9"/><line x1="21" y1="3" x2="14" y2="10"/></svg>
+    </div>
+    <div>
+      <div id="toast-title" style="font-size:0.85rem; font-weight:700; color:#fff;">Auto Scaling Triggered</div>
+      <div id="toast-msg" style="font-size:0.75rem; color:#cbd5e1;">Traffic exceeded threshold. Scaling out to 3 instances.</div>
+    </div>
+  </div>
+
+  <script>
+    // State management
+    const state = {
+      tfMode: 'deploy', // 'deploy' or 'modify'
+      trafficRps: 120,  // Requests per second
+      thresholdRps: 350,// CloudWatch alarm threshold
+      minNodes: 1,
+      maxNodes: 4,
+      nodes: [
+        { id: 'i-01a2f9b1', name: 'EC2 Web Instance 1', ip: '10.0.1.14', cpu: 28, requests: 60, status: 'healthy' },
+        { id: 'i-088f12c4', name: 'EC2 Web Instance 2', ip: '10.0.1.88', cpu: 26, requests: 60, status: 'healthy' }
+      ],
+      packetParticles: [], // Blue: HTTP traffic
+      alarmParticles: [],  // Pink: CloudWatch webhook alarm signals
+      tfParticles: [],     // Purple: Terraform IaC apply streams
+      lastScaleTime: 0
+    };
+
+    // Node pools for scaling
+    const availableNodePool = [
+      { id: 'i-03d8e571', name: 'EC2 Web Instance 3', ip: '10.0.1.142', cpu: 25, requests: 0, status: 'healthy' },
+      { id: 'i-09f4b620', name: 'EC2 Web Instance 4', ip: '10.0.1.205', cpu: 25, requests: 0, status: 'healthy' }
+    ];
+
+    // Initialize UI
+    window.addEventListener('DOMContentLoaded', () => {
+      renderNodes();
+      updateTelemetry();
+      initCanvas();
+      setupTrafficLoop();
+    });
+
+    // 1. Terraform Deployment Mode Switching
+    function setTerraformMode(mode) {
+      state.tfMode = mode;
+      const vpcTagBadge = document.getElementById('vpc-tag-badge');
+      const vpcTagText = document.getElementById('vpc-tag-text');
+      const codeVpcTag = document.getElementById('code-vpc-tag');
+      const activeTagLabel = document.getElementById('active-tag-label');
+      const vpcEnclosure = document.getElementById('vpc-enclosure');
+      const btnDeploy = document.getElementById('btn-deploy');
+      const btnModify = document.getElementById('btn-modify');
+      const diffBadge = document.getElementById('diff-badge');
+      const diffDel = document.getElementById('diff-line-del');
+      const diffAdd = document.getElementById('diff-line-add');
+      const headerState = document.getElementById('header-state-text');
+
+      if (mode === 'deploy') {
+        btnDeploy.className = 'segment-btn active initial';
+        btnModify.className = 'segment-btn';
+
+        vpcTagBadge.className = 'vpc-tag-badge green';
+        vpcTagText.innerText = 'Tag: Assignment6-VPC';
+        codeVpcTag.className = 'code-tag-val green';
+        codeVpcTag.innerText = '"Assignment6-VPC"';
+        activeTagLabel.innerText = 'Assignment6-VPC';
+        activeTagLabel.style.color = '#6ee7b7';
+        vpcEnclosure.classList.remove('highlight-change');
+
+        headerState.innerText = 'VPC: Available (Assignment6-VPC)';
+
+        diffBadge.innerText = 'Apply: 2 added, 0 changed, 0 destroyed';
+        diffBadge.style.color = '#34d399';
+        diffBadge.style.borderColor = 'rgba(16, 185, 129, 0.4)';
+        diffBadge.style.background = 'rgba(16, 185, 129, 0.15)';
+
+        diffDel.style.display = 'none';
+        diffAdd.style.display = 'none';
+
+        logTerminal('terraform apply -auto-approve', [
+          'aws_vpc.main_vpc: Refreshing state... [id=vpc-084a92c10fa]',
+          'aws_subnet.main_subnet: Refreshing state... [id=subnet-01e4a8f9]',
+          '<span class="term-success">Apply complete! Resources: 2 added, 0 changed, 0 destroyed.</span>'
+        ]);
+      } else {
+        btnDeploy.className = 'segment-btn';
+        btnModify.className = 'segment-btn active modify';
+
+        vpcTagBadge.className = 'vpc-tag-badge modified';
+        vpcTagText.innerText = 'Tag: Assignment6-VPC-modified';
+        codeVpcTag.className = 'code-tag-val modified';
+        codeVpcTag.innerText = '"Assignment6-VPC-modified"';
+        activeTagLabel.innerText = 'Assignment6-VPC-modified';
+        activeTagLabel.style.color = '#fbbf24';
+        vpcEnclosure.classList.add('highlight-change');
+
+        headerState.innerText = 'VPC: Modified In-Place (Assignment6-VPC-modified)';
+
+        diffBadge.innerText = 'Plan: 0 to add, 1 to change, 0 to destroy.';
+        diffBadge.style.color = '#fbbf24';
+        diffBadge.style.borderColor = 'rgba(245, 158, 11, 0.4)';
+        diffBadge.style.background = 'rgba(245, 158, 11, 0.2)';
+
+        diffDel.style.display = 'block';
+        diffAdd.style.display = 'block';
+
+        logTerminal('terraform apply -auto-approve', [
+          'aws_vpc.main_vpc: Modifying... [id=vpc-084a92c10fa]',
+          '  ~ tags = {',
+          '    - "Name" = "Assignment6-VPC"',
+          '    + "Name" = "Assignment6-VPC-modified"',
+          '  }',
+          'aws_vpc.main_vpc: Modifications complete after 1s [id=vpc-084a92c10fa]',
+          '<span class="term-highlight">Apply complete! Resources: 0 added, 1 changed, 0 destroyed. (In-place update)</span>'
+        ]);
+      }
+
+      spawnTerraformStream();
+    }
+
+    function triggerTerraformApplyAnimation() {
+      setTerraformMode(state.tfMode);
+    }
+
+    // 2. Terminal Logging Simulator
+    function logTerminal(cmd, lines) {
+      const term = document.getElementById('terminal-body');
+      const cmdLine = document.createElement('div');
+      cmdLine.className = 'term-line';
+      cmdLine.innerHTML = `<span class="term-prompt">PS D:\\aws teraforma&gt;</span> <span>${cmd}</span>`;
+      term.appendChild(cmdLine);
+
+      lines.forEach((line, idx) => {
+        setTimeout(() => {
+          const l = document.createElement('div');
+          l.className = 'term-line';
+          l.innerHTML = line;
+          term.appendChild(l);
+          term.scrollTop = term.scrollHeight;
+        }, (idx + 1) * 80);
+      });
+    }
+
+    function clearTerminal() {
+      document.getElementById('terminal-body').innerHTML = `
+        <div class="term-line"><span class="term-prompt">PS D:\\aws teraforma&gt;</span> <span class="term-cyan">Ready for Terraform operations.</span></div>
+      `;
+    }
+
+    // 3. Traffic Generator and Dynamic Scaling & Descaling Engine
+    function onTrafficSliderChange(val) {
+      state.trafficRps = parseInt(val, 10);
+      updateTrafficUI();
+      evaluateAutoScaling();
+    }
+
+    function setTrafficPreset(rps) {
+      document.getElementById('traffic-slider').value = rps;
+      document.querySelectorAll('.preset-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.innerText.includes(rps.toString()));
+      });
+      onTrafficSliderChange(rps);
+    }
+
+    function updateTrafficUI() {
+      const disp = document.getElementById('traffic-display');
+      let status = 'NORMAL';
+      let color = '#38bdf8';
+
+      if (state.trafficRps < 50) {
+        status = 'LOW (IDLE)';
+        color = '#94a3b8';
+      } else if (state.trafficRps <= 300) {
+        status = 'NORMAL (OPTIMAL)';
+        color = '#34d399';
+      } else if (state.trafficRps <= 600) {
+        status = 'SURGE (THRESHOLD BREACH)';
+        color = '#f59e0b';
+      } else {
+        status = 'PEAK (MAX CAPACITY)';
+        color = '#ef4444';
+      }
+
+      disp.innerHTML = `${state.trafficRps} req/s &bull; <span style="color:${color}">${status}</span>`;
+    }
+
+    function evaluateAutoScaling() {
+      const rpsPerNode = state.trafficRps / state.nodes.length;
+      const targetRpsPerNode = 160;
+      const scaleInRpsThreshold = 80;
+
+      const cwAlarmBox = document.getElementById('cloudwatch-alarm-box');
+      const cwStatusPill = document.getElementById('cw-status-pill');
+      const kpiAlarm = document.getElementById('kpi-alarm');
+      const webhookStatus = document.getElementById('webhook-status-text');
+
+      // Update CloudWatch Alarm based on user-defined threshold XYZ (350 RPS)
+      const isAlarming = state.trafficRps > state.thresholdRps;
+
+      if (isAlarming) {
+        cwAlarmBox.classList.add('in-alarm');
+        cwStatusPill.className = 'cw-status-pill alarm';
+        cwStatusPill.innerText = `ALARM: ${state.trafficRps} > 350 RPS`;
+        kpiAlarm.className = 'kpi-val alarm';
+        kpiAlarm.innerText = 'BREACH';
+        webhookStatus.innerHTML = `<span style="color:#f472b6; font-weight:700;">[ALARM TRIGGER]</span> POST /webhook/terraform-scaling (RPS: ${state.trafficRps})`;
+        
+        // Spawn pink feedback signal packets from CloudWatch to Developer Workstation
+        spawnAlarmWebhookSignal();
+      } else {
+        cwAlarmBox.classList.remove('in-alarm');
+        cwStatusPill.className = 'cw-status-pill';
+        cwStatusPill.innerText = 'State: OK (Under 350 RPS)';
+        kpiAlarm.className = 'kpi-val healthy';
+        kpiAlarm.innerText = 'OK';
+        webhookStatus.innerText = 'Listening for CloudWatch threshold alarms...';
+      }
+
+      // Calculate estimated CPU
+      const baseCpu = 15;
+      const calculatedCpu = Math.min(98, Math.round(baseCpu + (rpsPerNode / 2.5)));
+
+      state.nodes.forEach(node => {
+        node.cpu = calculatedCpu + Math.floor((Math.random() * 6) - 3);
+        node.requests = Math.round(state.trafficRps / state.nodes.length);
+      });
+
+      // SCALE OUT VIA TERRAFORM IaC
+      if (rpsPerNode > targetRpsPerNode && state.nodes.length < state.maxNodes) {
+        scaleOutViaTerraform();
+      }
+      // SCALE IN / DESCALING VIA TERRAFORM IaC
+      else if (rpsPerNode < scaleInRpsThreshold && state.nodes.length > 2 && state.trafficRps <= 140) {
+        scaleInViaTerraform();
+      }
+
+      updateTelemetry();
+      renderNodes();
+    }
+
+    function scaleOutViaTerraform() {
+      if (state.nodes.length >= state.maxNodes) return;
+      const candidate = availableNodePool.shift();
+      if (!candidate) return;
+
+      candidate.status = 'healthy';
+      state.nodes.push(candidate);
+
+      const newDesired = state.nodes.length;
+      document.getElementById('code-desired-capacity').innerText = newDesired;
+      document.getElementById('kpi-desired').innerText = `${newDesired} nodes`;
+
+      showScaleToast('Event-Driven IaC Scale-Out', `CloudWatch breach (${state.trafficRps} RPS) triggered Terraform API: desired_capacity updated to ${newDesired}.`);
+
+      logTerminal('terraform apply -target=aws_autoscaling_group.web_asg', [
+        `<span class="term-pink">[CloudWatch Alarm] Metric "TrafficRate" breach: ${state.trafficRps} RPS &gt; 350 RPS</span>`,
+        `<span class="term-cyan">[EventBridge] Dispatching Webhook &rarr; POST /iac/scale-out { desired_capacity: ${newDesired} }</span>`,
+        `[Terraform Engine] Updating main.tf: desired_capacity = ${newDesired}`,
+        `[Terraform] ~ update in-place: aws_autoscaling_group.web (desired_capacity: ${newDesired - 1} => ${newDesired})`,
+        `<span class="term-success">AWS API ec2:RunInstances: Launched ${candidate.id} (${candidate.ip}:80). Cluster capacity: ${newDesired}.</span>`
+      ]);
+
+      spawnTerraformStream();
+    }
+
+    function scaleInViaTerraform() {
+      if (state.nodes.length <= 2) return;
+      const removed = state.nodes.pop();
+      if (!removed) return;
+
+      availableNodePool.unshift(removed);
+
+      const newDesired = state.nodes.length;
+      document.getElementById('code-desired-capacity').innerText = newDesired;
+      document.getElementById('kpi-desired').innerText = `${newDesired} nodes`;
+
+      showScaleToast('Event-Driven IaC Scale-In (De-scaling)', `Traffic subsidized (${state.trafficRps} RPS). Terraform descaled cluster to ${newDesired} nodes.`);
+
+      logTerminal('terraform apply -target=aws_autoscaling_group.web_asg', [
+        `<span class="term-cyan">[CloudWatch Alarm] Traffic normalized to ${state.trafficRps} RPS.</span>`,
+        `<span class="term-cyan">[EventBridge] Webhook &rarr; POST /iac/scale-in { desired_capacity: ${newDesired} }</span>`,
+        `[Terraform Engine] Updating main.tf: desired_capacity = ${newDesired}`,
+        `[AWS API] Gracefully draining active connections on ${removed.id}...`,
+        `<span class="term-success">Apply complete! Instance ${removed.id} terminated cleanly. Base capacity maintained.</span>`
+      ]);
+
+      spawnTerraformStream();
+    }
+
+    function showScaleToast(title, msg) {
+      const toast = document.getElementById('scale-toast');
+      document.getElementById('toast-title').innerText = title;
+      document.getElementById('toast-msg').innerText = msg;
+      toast.classList.add('show');
+      setTimeout(() => { toast.classList.remove('show'); }, 4200);
+    }
+
+    function updateTelemetry() {
+      const kpiInstances = document.getElementById('kpi-instances');
+      const asgCountText = document.getElementById('asg-count-text');
+
+      kpiInstances.innerText = state.nodes.length;
+      asgCountText.innerText = `Capacity: ${state.nodes.length} nodes`;
+    }
+
+    function renderNodes() {
+      const grid = document.getElementById('nodes-grid');
+      grid.innerHTML = '';
+
+      state.nodes.forEach((node) => {
+        const nodeEl = document.createElement('div');
+        nodeEl.className = 'ec2-node scale-in-anim';
+        nodeEl.id = `node-${node.id}`;
+        nodeEl.onclick = () => openNodeModal(node);
+
+        const cpuColor = node.cpu > 75 ? '#ef4444' : (node.cpu > 50 ? '#f59e0b' : '#10b981');
+
+        nodeEl.innerHTML = `
+          <div class="node-chip-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="4" y="4" width="16" height="16" rx="2"/>
+              <rect x="9" y="9" width="6" height="6"/>
+              <line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/>
+              <line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/>
+            </svg>
+          </div>
+          <div class="node-title">${node.name}</div>
+          <div class="node-ip">${node.ip}</div>
+          <div class="node-badge-service">Port 80 &bull; HTTPD</div>
+          <div style="font-size:0.65rem; color:#94a3b8; display:flex; justify-content:space-between; width:100%; margin-top:2px;">
+            <span>CPU: ${node.cpu}%</span>
+            <span>${node.requests} rps</span>
+          </div>
+          <div class="node-load-bar">
+            <div class="node-load-fill" style="width:${node.cpu}%; background:${cpuColor};"></div>
+          </div>
+        `;
+
+        grid.appendChild(nodeEl);
+      });
+    }
+
+    // Modal Handlers
+    function openNodeModal(node) {
+      document.getElementById('modal-server-title').innerText = `${node.name} (${node.ip}:80)`;
+      document.getElementById('modal-server-ip').innerText = node.ip;
+      document.getElementById('modal-instance-id').innerText = node.id;
+      document.getElementById('web-modal').classList.add('open');
+    }
+
+    function closeModal() { document.getElementById('web-modal').classList.remove('open'); }
+    function closeModalOnBackdrop(e) { if (e.target.id === 'web-modal') closeModal(); }
+
+    function openTerraformExplainerModal() { document.getElementById('tf-explainer-modal').classList.add('open'); }
+    function closeTerraformExplainerModal() { document.getElementById('tf-explainer-modal').classList.remove('open'); }
+    function closeExplainerOnBackdrop(e) { if (e.target.id === 'tf-explainer-modal') closeTerraformExplainerModal(); }
+
+    // 5. Canvas Packet Flow Animation
+    let canvas, ctx;
+
+    function initCanvas() {
+      canvas = document.getElementById('traffic-canvas');
+      ctx = canvas.getContext('2d');
+      resizeCanvas();
+      window.addEventListener('resize', resizeCanvas);
+    }
+
+    function resizeCanvas() {
+      const rect = canvas.parentElement.getBoundingClientRect();
+      canvas.width = rect.width;
+      canvas.height = rect.height;
+    }
+
+    // Spawns Blue Client HTTP Traffic
+    function spawnTrafficPacket() {
+      const clientEl = document.getElementById('client-zone');
+      const igwEl = document.getElementById('igw-component');
+      if (!clientEl || !igwEl || state.nodes.length === 0) return;
+
+      const parentRect = canvas.parentElement.getBoundingClientRect();
+      const clientRect = clientEl.getBoundingClientRect();
+      const igwRect = igwEl.getBoundingClientRect();
+
+      const targetNodeIndex = Math.floor(Math.random() * state.nodes.length);
+      const targetNodeObj = state.nodes[targetNodeIndex];
+      const targetNodeEl = document.getElementById(`node-${targetNodeObj.id}`);
+      if (!targetNodeEl) return;
+      const nodeRect = targetNodeEl.getBoundingClientRect();
+
+      const startX = (clientRect.left + clientRect.width / 2) - parentRect.left;
+      const startY = (clientRect.top + clientRect.height / 2) - parentRect.top;
+
+      const igwX = (igwRect.left + igwRect.width / 2) - parentRect.left;
+      const igwY = (igwRect.top + igwRect.height / 2) - parentRect.top;
+
+      const endX = (nodeRect.left + nodeRect.width / 2) - parentRect.left;
+      const endY = (nodeRect.top + nodeRect.height / 2) - parentRect.top;
+
+      state.packetParticles.push({
+        x: startX, y: startY,
+        startX, startY, igwX, igwY, endX, endY,
+        progress: 0,
+        speed: 0.018 + (state.trafficRps / 12000),
+        color: '#38bdf8',
+        targetId: targetNodeObj.id
+      });
+    }
+
+    // Spawns Pink Alarm Signal: CloudWatch Alarm -> Developer Workstation Webhook
+    function spawnAlarmWebhookSignal() {
+      const cwEl = document.getElementById('cloudwatch-alarm-box');
+      const devEl = document.getElementById('dev-workstation');
+      if (!cwEl || !devEl) return;
+
+      const parentRect = canvas.parentElement.getBoundingClientRect();
+      const cwRect = cwEl.getBoundingClientRect();
+      const devRect = devEl.getBoundingClientRect();
+
+      const startX = (cwRect.left + 40) - parentRect.left;
+      const startY = (cwRect.bottom - 10) - parentRect.top;
+
+      const endX = (devRect.right - 20) - parentRect.left;
+      const endY = (devRect.bottom - 40) - parentRect.top;
+
+      state.alarmParticles.push({
+        startX, startY, endX, endY,
+        progress: 0,
+        speed: 0.02,
+        color: '#ec4899'
+      });
+    }
+
+    // Spawns Purple/Green Terraform API Execution Stream: Workstation -> AWS VPC / ASG
+    function spawnTerraformStream() {
+      const devEl = document.getElementById('dev-workstation');
+      const asgEl = document.getElementById('asg-enclosure');
+      if (!devEl || !asgEl) return;
+
+      const parentRect = canvas.parentElement.getBoundingClientRect();
+      const devRect = devEl.getBoundingClientRect();
+      const asgRect = asgEl.getBoundingClientRect();
+
+      const startX = (devRect.right) - parentRect.left;
+      const startY = (devRect.top + 160) - parentRect.top;
+
+      const endX = (asgRect.left + 40) - parentRect.left;
+      const endY = (asgRect.top + 20) - parentRect.top;
+
+      for (let i = 0; i < 14; i++) {
+        setTimeout(() => {
+          state.tfParticles.push({
+            startX, startY, endX, endY,
+            progress: 0,
+            speed: 0.025,
+            color: state.tfMode === 'deploy' ? '#10b981' : '#a855f7'
+          });
+        }, i * 50);
+      }
+    }
+
+    function setupTrafficLoop() {
+      let lastSpawn = 0;
+
+      function render(timestamp) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        const interval = Math.max(30, 1000 / (state.trafficRps / 10));
+        if (timestamp - lastSpawn > interval) {
+          spawnTrafficPacket();
+          lastSpawn = timestamp;
+        }
+
+        drawDashedTracks();
+
+        // 1. Blue HTTP Traffic Packets
+        for (let i = state.packetParticles.length - 1; i >= 0; i--) {
+          const p = state.packetParticles[i];
+          p.progress += p.speed;
+
+          let currentX, currentY;
+          if (p.progress <= 0.4) {
+            const t = p.progress / 0.4;
+            currentX = p.startX + (p.igwX - p.startX) * t;
+            currentY = p.startY + (p.igwY - p.startY) * t;
+          } else {
+            const t = (p.progress - 0.4) / 0.6;
+            currentX = p.igwX + (p.endX - p.igwX) * t;
+            currentY = p.igwY + (p.endY - p.igwY) * t;
+          }
+
+          ctx.beginPath();
+          ctx.arc(currentX, currentY, 4, 0, Math.PI * 2);
+          ctx.fillStyle = p.color;
+          ctx.shadowBlur = 10;
+          ctx.shadowColor = p.color;
+          ctx.fill();
+          ctx.shadowBlur = 0;
+
+          if (p.progress >= 1) {
+            const targetEl = document.getElementById(`node-${p.targetId}`);
+            if (targetEl) {
+              targetEl.classList.add('receiving-traffic');
+              setTimeout(() => targetEl.classList.remove('receiving-traffic'), 150);
+            }
+            state.packetParticles.splice(i, 1);
+          }
+        }
+
+        // 2. Pink Alarm Webhook Stream: CloudWatch -> Dev Workstation
+        for (let i = state.alarmParticles.length - 1; i >= 0; i--) {
+          const ap = state.alarmParticles[i];
+          ap.progress += ap.speed;
+
+          // Control point for a gentle curved path
+          const midX = (ap.startX + ap.endX) / 2;
+          const midY = Math.max(ap.startY, ap.endY) + 40;
+          const t = ap.progress;
+          const currentX = (1 - t) * (1 - t) * ap.startX + 2 * (1 - t) * t * midX + t * t * ap.endX;
+          const currentY = (1 - t) * (1 - t) * ap.startY + 2 * (1 - t) * t * midY + t * t * ap.endY;
+
+          ctx.beginPath();
+          ctx.arc(currentX, currentY, 5, 0, Math.PI * 2);
+          ctx.fillStyle = ap.color;
+          ctx.shadowBlur = 12;
+          ctx.shadowColor = ap.color;
+          ctx.fill();
+          ctx.shadowBlur = 0;
+
+          if (ap.progress >= 1) {
+            state.alarmParticles.splice(i, 1);
+          }
+        }
+
+        // 3. Purple/Green Terraform IaC apply stream: Workstation -> AWS ASG
+        for (let i = state.tfParticles.length - 1; i >= 0; i--) {
+          const tfp = state.tfParticles[i];
+          tfp.progress += tfp.speed;
+
+          const currentX = tfp.startX + (tfp.endX - tfp.startX) * tfp.progress;
+          const currentY = tfp.startY + (tfp.endY - tfp.startY) * tfp.progress;
+
+          ctx.beginPath();
+          ctx.arc(currentX, currentY, 5, 0, Math.PI * 2);
+          ctx.fillStyle = tfp.color;
+          ctx.shadowBlur = 12;
+          ctx.shadowColor = tfp.color;
+          ctx.fill();
+          ctx.shadowBlur = 0;
+
+          if (tfp.progress >= 1) {
+            state.tfParticles.splice(i, 1);
+          }
+        }
+
+        requestAnimationFrame(render);
+      }
+
+      requestAnimationFrame(render);
+    }
+
+    function drawDashedTracks() {
+      const clientEl = document.getElementById('client-zone');
+      const igwEl = document.getElementById('igw-component');
+      if (!clientEl || !igwEl) return;
+
+      const parentRect = canvas.parentElement.getBoundingClientRect();
+      const clientRect = clientEl.getBoundingClientRect();
+      const igwRect = igwEl.getBoundingClientRect();
+
+      const cx = (clientRect.left + clientRect.width / 2) - parentRect.left;
+      const cy = (clientRect.top + clientRect.height / 2) - parentRect.top;
+      const ix = (igwRect.left + igwRect.width / 2) - parentRect.left;
+      const iy = (igwRect.top + igwRect.height / 2) - parentRect.top;
+
+      // Draw Client <-> IGW line
+      ctx.beginPath();
+      ctx.setLineDash([4, 6]);
+      ctx.strokeStyle = 'rgba(56, 189, 248, 0.25)';
+      ctx.lineWidth = 1.5;
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(ix, iy);
+      ctx.stroke();
+
+      // Draw IGW -> Each EC2 node line
+      state.nodes.forEach(node => {
+        const nodeEl = document.getElementById(`node-${node.id}`);
+        if (!nodeEl) return;
+        const nRect = nodeEl.getBoundingClientRect();
+        const nx = (nRect.left + nRect.width / 2) - parentRect.left;
+        const ny = (nRect.top + nRect.height / 2) - parentRect.top;
+
+        ctx.beginPath();
+        ctx.moveTo(ix, iy);
+        ctx.lineTo(nx, ny);
+        ctx.stroke();
+      });
+
+      // Draw Dev Workstation -> ASG line (IaC provisioning track)
+      const devEl = document.getElementById('dev-workstation');
+      const asgEl = document.getElementById('asg-enclosure');
+      if (devEl && asgEl) {
+        const dRect = devEl.getBoundingClientRect();
+        const aRect = asgEl.getBoundingClientRect();
+        const dx = dRect.right - parentRect.left;
+        const dy = (dRect.top + 160) - parentRect.top;
+        const ax = (aRect.left + 40) - parentRect.left;
+        const ay = (aRect.top + 20) - parentRect.top;
+
+        ctx.beginPath();
+        ctx.strokeStyle = 'rgba(123, 66, 188, 0.35)';
+        ctx.moveTo(dx, dy);
+        ctx.lineTo(ax, ay);
+        ctx.stroke();
+      }
+
+      // Draw CloudWatch Alarm -> Dev Workstation Webhook curved track
+      const cwEl = document.getElementById('cloudwatch-alarm-box');
+      if (cwEl && devEl) {
+        const cwRect = cwEl.getBoundingClientRect();
+        const dRect = devEl.getBoundingClientRect();
+        const startX = (cwRect.left + 40) - parentRect.left;
+        const startY = (cwRect.bottom - 10) - parentRect.top;
+        const endX = (dRect.right - 20) - parentRect.left;
+        const endY = (dRect.bottom - 40) - parentRect.top;
+        const midX = (startX + endX) / 2;
+        const midY = Math.max(startY, endY) + 40;
+
+        ctx.beginPath();
+        ctx.strokeStyle = state.trafficRps > state.thresholdRps ? 'rgba(236, 72, 153, 0.45)' : 'rgba(236, 72, 153, 0.15)';
+        ctx.moveTo(startX, startY);
+        ctx.quadraticCurveTo(midX, midY, endX, endY);
+        ctx.stroke();
+      }
+
+      ctx.setLineDash([]);
+    }
+  </script>
+</body>
+</html>
